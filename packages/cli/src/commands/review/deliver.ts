@@ -1,4 +1,5 @@
 import { join, relative, resolve } from "node:path";
+import { errorMessage } from "@open-cr-agent/core";
 import { sendToCloud } from "../../cloud/review.js";
 import { writeOutputFile } from "../../io/output-file.js";
 import { VERSION } from "../../version.js";
@@ -35,6 +36,29 @@ export async function writeReport(
   if (hidden > 0) io.err.write(`[ocra] ${hidden} finding(s) hidden by your ocra Cloud memory\n`);
 }
 
+// The change request shows the review running from the start to how it
+// ended: published, interrupted or failed.
+export async function executeShown(
+  run: ResolvedRun,
+  execute: () => Promise<ExecutedRun>,
+): Promise<ExecutedRun> {
+  const shown = run.target.publish && run.target.platform !== "local";
+  if (!shown) return execute();
+  for (const warning of (await run.vcs.started?.())?.warnings ?? []) run.warn(warning);
+  const stopped = async (reason: string) => {
+    for (const warning of (await run.vcs.stopped?.(reason))?.warnings ?? []) run.warn(warning);
+  };
+  let executed: ExecutedRun;
+  try {
+    executed = await execute();
+  } catch (error) {
+    await stopped(`The review failed: ${errorMessage(error)}`);
+    throw error;
+  }
+  if (executed.interrupted) await stopped("The review was interrupted before it finished.");
+  return executed;
+}
+
 // Publishes to the pull or merge request when asked, and uploads to ocra
 // Cloud when signed in.
 export async function deliver(
@@ -69,6 +93,7 @@ export async function deliver(
       ...(target.changeRequestNumber === undefined
         ? {}
         : { changeRequestNumber: target.changeRequestNumber }),
+      shareRepoName: run.config.cloud.shareRepoName === true,
       err: io.err,
       warn: run.warn,
     });

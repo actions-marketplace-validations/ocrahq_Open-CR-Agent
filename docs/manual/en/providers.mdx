@@ -56,6 +56,7 @@ A self-hosted server (vLLM, Ollama, LM Studio) or a company gateway that speaks 
 - **`effort`** (optional) says how the endpoint takes a [reasoning effort](./configuration#effort), on either runtime: `openai` (default; OpenAI, Gemini's OpenAI-compatible endpoint and OpenRouter accept it) sends `reasoning_effort`, `openrouter` sends `reasoning: { effort }`.
 - **`toolCalls`** (optional) says how the endpoint's models call the review tools, on the `direct` runtime: `api` (default) through the protocol's `tools` parameter, `text` for an endpoint that takes none (see [An endpoint without function calling](#an-endpoint-without-function-calling)). The `opencode` runtime refuses `text`.
 - **Every model has a price** in US dollars per million tokens: `input`, `output`, optionally `cachedInput`, used for the reported cost and `--max-cost-usd`. A price of 0 (your own hardware) makes the run warn that the spend limit does not count the model.
+- **`contextWindow`** (optional, on a model) is the number of tokens one request to it may hold, for a model served with a small window (see [A model with a small context window](#a-model-with-a-small-context-window)).
 - A shared configuration (`extends`) may declare providers only when pinned with `#sha256=`; otherwise whoever serves it could redirect your code. ocra ignores an unpinned one that declares providers, with a warning giving the pin to add once you have checked it. The repository's declaration of the same id wins. In pull and merge requests, providers come from the base commit.
 
 Tested in CI against a fake OpenAI-compatible server with the real OpenCode binary (the key goes where it should, the price is counted, nothing else is reached), and live on OpenRouter (a free model, 2026-10-02).
@@ -85,6 +86,22 @@ A reviewer works by calling tools: it reads files, searches the code, and report
 The steps, the step cap, the checks on each finding and what a tool may read are the same either way. How well a model keeps to the form is the model's: one that writes a call ocra cannot read is told so and may correct it, and one that never writes a call reviews nothing, which the report says. Where the server can parse tool calls itself, turn that on instead: it is the more reliable of the two.
 
 Tested against a scripted endpoint (a refused `tools` parameter, a declared provider, a malformed call); not yet run against a live model.
+
+### A model with a small context window
+
+ocra sizes a review for the windows of current hosted models: a task's first prompt can reach tens of thousands of tokens, and its conversation grows with every file the reviewer reads. A self-hosted model served at 16K or 32K tokens refuses a request past its window, and the task fails. Declare the window on the model, as the server enforces it, the answer included (vLLM's `--max-model-len`):
+
+```json
+"models": { "qwen3-coder": { "input": 0, "output": 0, "contextWindow": 32000 } }
+```
+
+- **The plan fits it**, on either runtime: a task's diff is held to a quarter of the smallest window among the models the run names, so a large change becomes more and smaller tasks.
+- **A conversation stops before it overflows**, on the [`direct` runtime](#choosing-the-runtime): when the next request would leave less than 15% of the window, the reviewer gets its wrap-up turn to report what it confirmed, and its files count as partly reviewed (`ended: context_window`). The review is then incomplete (exit code 3) and says why.
+- **A prompt that does not fit at all** is not sent: the attempt fails on that model, naming both sizes, and the next model of the chain takes the task.
+
+The smallest window ocra accepts is 8,000 tokens. The context around the diff (guidelines, rules, linked tasks, callers) is not cut down for a small window, so under about 32K a reviewer has little room left to read code: serve the model with the largest window the hardware affords. The `opencode` runtime plans with the window but does not stop a conversation at it.
+
+Tested against a scripted endpoint that refuses requests past its window; not yet run against a live model.
 
 ### An endpoint that speaks Anthropic's API
 
@@ -154,16 +171,19 @@ The declared endpoint works without OpenCode's pricing catalog; the catalog form
 
 ## Choosing the runtime
 
-Two runtimes can run the reviewers; `runtime` in the configuration picks one:
+Three runtimes can run the reviewers; `runtime` in the configuration picks one:
 
 | Runtime | Reaches | Use it when |
 |---|---|---|
 | `opencode` (default) | Every provider in OpenCode's catalog and your declared endpoints, plus the pricing catalog `models.opencode.ai` | Your models are Gemini, Vertex AI, Anthropic, Bedrock or another catalog provider |
 | `direct` | Only the endpoints declared under `providers`, in OpenAI's or Anthropic's protocol; nothing else on the network | Every model in your chains is on a declared endpoint, and you want nothing but that endpoint reached |
+| `codex` (new) | OpenAI, through the [Codex CLI](https://github.com/openai/codex) signed in on your computer | You review on your own ChatGPT plan rather than an API key |
 
 Both run the same review: tools, step cap, failback and prices. `direct` refuses, before any request, a chain naming a provider you did not declare, and honors `HTTP_PROXY`, `HTTPS_PROXY` and `NO_PROXY`. The [quality numbers](./quality) were measured on `opencode`; `direct` passes the same conformance tests but has not been evaluated on the golden set yet.
 
 To see what `direct` sent a model and got back, set `OCRA_RECORD_DIR` to a directory: each request is written there as a JSON file with its answers, readable only by you. Keys become `<key>`, an ocra Cloud token renewed during the run included, and headers and the endpoint address are left out, but the files hold the code and prompts, so guard them like the code. A recording ocra cannot write is a warning on stderr; the review goes on and no request is sent again. A recording replays only the exact conversation it recorded. `opencode` ignores the variable.
+
+`codex` runs each reviewer as one `codex exec` on the Codex signed in on your computer (`codex login`; Codex 0.172.0 or later, found as `codex` on `PATH` or at `OCRA_CODEX_BIN`). Its chains name `codex/default`, Codex's own default model, or `codex/<model>` with a model your Codex offers; any other provider is refused before Codex starts. The reviewer reads the change only through ocra's tools: Codex's shell, file, web and plugin tools are switched off, it runs in an empty directory, read-only, without your `config.toml`, rules or MCP servers, and the review is not kept among your Codex sessions. An API key in the environment is not passed to it. Tokens are reported and cost $0, since your plan pays; a spent usage limit drops the model for the run. A review that is not finished at the step cap ends there: Codex keeps no session to give it the wrap-up turn.
 
 The `opencode` runtime is an optional dependency, installed by default; with `direct` you can leave it out and save about 165 MB: see [Without OpenCode](./installation#without-opencode) and the Action's `opencode: false` [input](./github#the-runtime).
 

@@ -61,6 +61,15 @@ export interface CreateReview {
   comments: ReviewComment[];
 }
 
+export interface CheckRun {
+  name: string;
+  status: "in_progress" | "completed";
+  conclusion?: "success" | "neutral" | "cancelled";
+  output: { title: string; summary: string };
+}
+
+const checkRunSchema = z.object({ id: z.number() });
+
 export class GitHubApiError extends OcraError {
   readonly status: number;
 
@@ -295,6 +304,14 @@ export class GitHubApi {
     await this.request("PATCH", `/issues/comments/${id}`, { body });
   }
 
+  async createCheckRun(check: CheckRun & { head_sha: string }): Promise<number> {
+    return checkRunSchema.parse(await this.request("POST", "/check-runs", check)).id;
+  }
+
+  async updateCheckRun(id: number, check: CheckRun): Promise<void> {
+    await this.request("PATCH", `/check-runs/${id}`, check);
+  }
+
   async createReview(number: number, review: CreateReview): Promise<void> {
     await this.request("POST", `/pulls/${number}/reviews`, review);
   }
@@ -382,6 +399,16 @@ export class GitHubApi {
     return this.baseUrl.endsWith("/api/v3")
       ? `${this.baseUrl.slice(0, -"/v3".length)}/graphql`
       : `${this.baseUrl}/graphql`;
+  }
+
+  // The address GitHub links a commit to an account by.
+  async noreplyEmail(login: string): Promise<string> {
+    const url = `${this.baseUrl}/users/${encodeURIComponent(login)}`;
+    const { id } = z
+      .object({ id: z.number() })
+      .parse(await sendWithRetry(this.api, { method: "GET", url, path: "/users/:login" }));
+    const host = new URL(this.baseUrl).hostname.replace(/^api\./, "");
+    return `${id}+${login}@users.noreply.${host}`;
   }
 
   // The end of a text answer, a job's log.

@@ -105,6 +105,7 @@ export {
   MAX_FINDINGS,
   MAX_MEMORY_PER_REPO,
   MAX_REVIEWERS,
+  MAX_RULE_TEXT,
   MAX_TOTAL_BYTES,
 } from "./limits.js";
 export {
@@ -189,6 +190,22 @@ export { REDACTED, redact, redactField } from "./redact.js";
 export { normaliseRemote, REPOSITORY_URL } from "./repository.js";
 export { MAX_RULES_MARKDOWN_CHARS, RULES_MARKDOWN_PATH } from "./rules.js";
 export {
+  ATTEMPT_ENDINGS,
+  FINDING_FATES,
+  type FindingFate,
+  MAX_TRACE_ATTEMPTS,
+  MAX_TRACE_BYTES,
+  MAX_TRACE_CALLS,
+  MAX_TRACE_FINDINGS,
+  MAX_TRACE_PATHS,
+  MAX_TRACE_TASKS,
+  MAX_TRACE_TEXT,
+  type SharedTrace,
+  sharedTraceSchema,
+} from "./trace.js";
+export {
+  FINDING_RULE_ID,
+  FINDING_RULE_KINDS,
   FINGERPRINT,
   LINKED_TASK_TRACKERS,
   MAX_LINKED_TASKS,
@@ -201,11 +218,13 @@ export {
   type SharedFinding,
   type SharedFix,
   type SharedLinkedTask,
+  type SharedRepo,
   type SharedWalkthrough,
   severityCountsSchema,
   sharedFindingSchema,
   sharedFixSchema,
   sharedLinkedTaskSchema,
+  sharedRepoSchema,
   sharedWalkthroughSchema,
   type UploadAnswer,
   uploadAnswerSchema,

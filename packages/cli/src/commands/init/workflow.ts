@@ -6,11 +6,11 @@
 // `node scripts/changelog.mjs action-pin <version>` moves this line with the
 // manual's; scripts/lib/manual-pins.test.mjs fails when they differ.
 export const ACTION_USES =
-  "ocrahq/Open-CR-Agent@3999f294d7ce02a4fc83a301cfeb37dfbbfa0b3b # v0.21.0";
+  "ocrahq/Open-CR-Agent@c13507b6357ca73661d83f09a275d8aa49c4f688 # v0.26.0";
 
 // By commit like the Action, so a moved tag cannot change what runs with the
 // workflow's secrets; scripts/lib/manual-pins.test.mjs keeps every recipe pinned.
-const CHECKOUT_USES = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1";
+export const CHECKOUT_USES = "actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1";
 
 export const REVIEW_LABEL = "ocra-review";
 
@@ -23,28 +23,37 @@ export interface WorkflowOptions {
   direct: boolean;
 }
 
-export function workflowFor({ kind, keyEnv, direct }: WorkflowOptions): string {
-  const header = [
-    "# Written by ocra init. What it does and how to change it:",
-    "# https://github.com/ocrahq/Open-CR-Agent/blob/main/docs/manual/en/github.mdx",
-  ];
-  const action = [
+export const HEADER = [
+  "# Written by ocra init. What it does and how to change it:",
+  "# https://github.com/ocrahq/Open-CR-Agent/blob/main/docs/manual/en/github.mdx",
+];
+
+// The Action's step: inputs first, then the provider's key.
+export function actionStep(
+  { keyEnv, direct }: Omit<WorkflowOptions, "kind">,
+  inputs: readonly string[],
+): string[] {
+  return [
     `uses: ${ACTION_USES}`,
     "with:",
     ...(direct ? ["  opencode: false"] : []),
-    "  args: --max-cost-usd 2",
+    ...inputs.map((input) => `  ${input}`),
     "env:",
     `  ${keyEnv}: ${expr(`secrets.${keyEnv}`)}`,
   ];
-  return `${[...header, ...(kind === "fork-safe" ? forkSafe(action) : sameRepo(action))].join("\n")}\n`;
+}
+
+export function workflowFor({ kind, keyEnv, direct }: WorkflowOptions): string {
+  const action = actionStep({ keyEnv, direct }, ["args: --max-cost-usd 2"]);
+  return `${[...HEADER, ...(kind === "fork-safe" ? forkSafe(action) : sameRepo(action))].join("\n")}\n`;
 }
 
 // A GitHub Actions expression, ${{ ... }}.
-function expr(expression: string): string {
+export function expr(expression: string): string {
   return `\${{ ${expression} }}`;
 }
 
-function step(lines: readonly string[], indent: string): string[] {
+export function step(lines: readonly string[], indent: string): string[] {
   const [first, ...rest] = lines;
   return [`${indent}- ${first}`, ...rest.map((line) => `${indent}  ${line}`)];
 }
@@ -70,6 +79,7 @@ function sameRepo(action: readonly string[]): string[] {
     "on: pull_request",
     "",
     "permissions:",
+    "  checks: write",
     "  contents: read",
     "  issues: read",
     "  pull-requests: write",
@@ -99,6 +109,7 @@ function forkSafe(action: readonly string[]): string[] {
     "    types: [opened, synchronize, reopened, labeled]",
     "",
     "permissions:",
+    "  checks: write",
     "  contents: read",
     "  issues: read",
     "  pull-requests: write",

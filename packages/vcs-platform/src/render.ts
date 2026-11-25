@@ -5,13 +5,13 @@ import {
   type IncompleteEnding,
   isIncompleteReview,
   isUnfinished,
-  MAX_AGENT_STEPS,
   type PriorFinding,
   type ReviewReport,
   type Severity,
   type Verification,
 } from "@open-cr-agent/core";
-import { quotaNote, unconfirmedCriticals } from "@open-cr-agent/core/internal";
+import { byline } from "./byline.js";
+import { incompleteNotes } from "./incomplete-notes.js";
 import { safeMarkdown } from "./neutralize.js";
 import { type ReviewState, SUMMARY_MARKER, writeState } from "./state.js";
 import { type SuggestionFence, suggestionBlock } from "./suggestion.js";
@@ -63,7 +63,7 @@ function overrideNote(report: ReviewReport, text: PlatformText): string[] {
   }
   return [
     "",
-    `Someone with ${text.authority} other than the author can let this commit pass by commenting \`/ocra override ${report.changeRequest.headSha} <reason>\`.`,
+    `Someone with ${text.authority} other than the author can let this commit pass by commenting \`@ocra override ${report.changeRequest.headSha} <reason>\`.`,
   ];
 }
 
@@ -148,7 +148,7 @@ function evidenceSection(evidence: readonly string[]): string[] {
 
 // The title stands alone on the first line, the notes under it in the same
 // paragraph: a backslash breaks the line on GitHub and on GitLab alike.
-export function inlineBody(f: Finding, fence: SuggestionFence): string {
+export function inlineBody(f: Finding, fence: SuggestionFence, agent?: string): string {
   const parts = [
     `<!-- ocra:finding ${f.fingerprint} -->`,
     `${ICON[f.severity]} **${safeLine(f.title)}**\\`,
@@ -163,6 +163,7 @@ export function inlineBody(f: Finding, fence: SuggestionFence): string {
   const block = TILDE_FENCE.test(parts.join("\n")) ? undefined : suggestionBlock(f, fence);
   if (block) parts.push("", block);
   parts.push(...evidenceSection(f.evidence));
+  if (agent) parts.push("", `<sub>${byline(agent)}</sub>`);
   return parts.join("\n");
 }
 
@@ -204,19 +205,29 @@ export function renderSummary({
   );
 }
 
+// The heading, the judge's summary and one line of counts: what the review
+// found is said once, and the findings themselves are on the diff.
 function verdictSection(report: ReviewReport, text: PlatformText): string[] {
-  const counts = (["critical", "warning", "suggestion"] as const)
-    .map((s) => `${report.findings.filter((f) => f.severity === s).length} ${s}`)
-    .join(", ");
+  const summary = report.summary.trim();
   return [
     SUMMARY_MARKER,
-    `## ocra review · ${headline(report)}`,
-    "",
-    safeMarkdown(report.summary, { startsLine: true }),
+    `## ${byline(report.agent)} review · ${headline(report)}`,
+    ...(summary === "" ? [] : ["", safeMarkdown(summary, { startsLine: true })]),
     ...overrideNote(report, text),
     "",
-    `**${report.findings.length} finding(s)** (${counts}) · risk tier \`${report.tier}\``,
+    countsLine(report),
   ];
+}
+
+function countsLine(report: ReviewReport): string {
+  const counts = (["critical", "warning", "suggestion"] as const).flatMap((severity) => {
+    const n = report.findings.filter((f) => f.severity === severity).length;
+    return n === 0 ? [] : [`${n} ${severity}${n === 1 ? "" : "s"}`];
+  });
+  const tier = `risk tier \`${report.tier}\``;
+  return counts.length === 0
+    ? `Risk tier \`${report.tier}\``
+    : `**${counts.join(", ")}** · ${tier}`;
 }
 
 const MAX_LISTED_FILES = 10;
@@ -284,59 +295,11 @@ function scopeNote(report: ReviewReport): string[] {
   return [];
 }
 
-// Unverified criticals that cap the verdict, and what the run did not check.
-function incompleteNotes(report: ReviewReport, text: PlatformText): string[] {
-  const lines: string[] = [];
-  const unverified = unconfirmedCriticals(report);
-  if (unverified > 0) {
-    lines.push(
-      "",
-      `${unverified} critical finding(s) are not verified, so they cap the verdict at minor issues.`,
-    );
-  }
-  if (report.unverifiedCriticals > 0) {
-    lines.push(
-      "",
-      `**Incomplete:** verification failed or ran out of budget for ${report.unverifiedCriticals} critical finding(s); check them yourself.`,
-    );
-  }
-  // The CLI's partly-reviewed.ts says the same for a terminal; this one names
-  // the platform and points at the next review.
-  const { notReviewed, incomplete } = coverageGaps(report);
-  const gaps: string[] = [];
-  const missed = notReviewed - incomplete.step_cap - incomplete.stopped_early;
-  if (missed > 0) {
-    const limit = report.spendLimit?.reached
-      ? `; the spend limit of $${report.spendLimit.usd} was reached`
-      : quotaNote(report.tasks);
-    gaps.push(`**Incomplete:** ${missed} selected file(s) were not reviewed${limit}.`);
-  }
-  if (incomplete.step_cap > 0) {
-    gaps.push(
-      `**Incomplete:** ${incomplete.step_cap} selected file(s) were only partly reviewed: a reviewer used all ${MAX_AGENT_STEPS} of its steps before it finished them. The step limit is fixed; a smaller ${text.changeRequest} gives each file more of them.`,
-    );
-  }
-  if (incomplete.stopped_early > 0) {
-    gaps.push(
-      `**Incomplete:** ${incomplete.stopped_early} selected file(s) were only partly reviewed: a reviewer stopped with steps left, without saying it had finished them. Run the review again, or use a stronger model if it keeps stopping.`,
-    );
-  }
-  const last = gaps.pop();
-  if (last !== undefined) {
-    for (const gap of gaps) lines.push("", gap);
-    lines.push(
-      "",
-      `${last} They are listed under Coverage and cost, and the next review of this ${text.changeRequest} includes them.`,
-    );
-  }
-  return lines;
-}
-
 function unattributedNote(unattributed: number): string[] {
   if (unattributed <= 0) return [];
   return [
     "",
-    `${unattributed} resolved thread(s) of ocra's did not dismiss their finding: nothing says who resolved them, as when a push resolves outdated threads. To dismiss a finding, answer its thread with \`/ocra dismiss\` or "won't fix".`,
+    `${unattributed} resolved thread(s) of ocra's did not dismiss their finding: nothing says who resolved them, as when a push resolves outdated threads. To dismiss a finding, answer its thread with \`@ocra dismiss\` or "won't fix".`,
   ];
 }
 
@@ -478,6 +441,7 @@ function coverageAndCost(report: ReviewReport): string[] {
 
 const PARTLY: Record<IncompleteEnding, string> = {
   step_cap: "partly reviewed (out of steps)",
+  context_window: "partly reviewed (context window full)",
   stopped_early: "partly reviewed (stopped early)",
 };
 

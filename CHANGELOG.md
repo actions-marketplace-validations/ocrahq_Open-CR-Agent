@@ -6,6 +6,102 @@ Entries come from the changesets in `.changeset/`, one per pull request that cha
 
 ## [Unreleased]
 
+## [0.27.0] - 2026-11-24
+
+### Added
+
+- `ocra init --github` also writes `.github/workflows/ocra-commands.yml`: `@ocra review` reviews a pull request again, and ocra answers any other `@ocra` mention in its thread.
+- `"runtime": "codex"` reviews on the Codex CLI signed in on your computer, with models written `codex/default` or `codex/<model>`: each reviewer is one `codex exec` that reads the change only through ocra's tools, with Codex's own tools, configuration, rules and session history left out and no API key passed. Tokens are reported at $0.
+- `providers.<id>.models.<model>.contextWindow`: the tokens one request to a model may hold, for a self-hosted model with a small window. The plan then holds a task's diff to a quarter of the smallest declared window, and the `direct` runtime ends a conversation before the request that would not fit, with the wrap-up turn, instead of failing on the endpoint's refusal. A prompt that cannot fit is not sent, and the next model of the chain takes the task.
+- A task cut short this way ends as `context_window` in the JSON report (`ended`, next to `step_cap` and `stopped_early`) and in the review trace sent to ocra Cloud; the review is incomplete and says why.
+- `ReviewLimits.contextWindow`, `ProviderModel` and `AttemptOutcome.atContextWindow` in `@open-cr-agent/core`, for embedders and runtime plugins.
+- `ReviewerScope.focus`: path words on which a reviewer runs from a lower tier than its `minTier`.
+- On GitHub, an `ocra review` check shows a review running on the pull request's head commit, then its verdict and findings when it ends. It never fails; the workflow needs `checks: write` to show it.
+- `cloud.shareRepoName` in `.ocra/config.json` (off by default) names the repository in every upload to ocra Cloud, by path and normalised address.
+- The review upload takes an optional `repo`: `name` and `url`, validated after normalising.
+
+### Changed
+
+- `ocra init` writes a workflow that pins the Action to v0.26.0.
+- ocra's comment commands are spelled `@ocra review`, `@ocra override`, `@ocra dismiss` and `@ocra remember`, as ocra Cloud spells its own. A comment that gives a command is no longer answered as a question.
+- The performance reviewer runs at the `lite` risk tier only on bundles with a file on a hot path (a path word such as cache, query, queue, pool, stream or cluster), and otherwise only at `full` (was every `lite` and `full` change). `reviewers.performance.minTier: "lite"` brings it back everywhere (ADR-0082).
+- The summary comment counts findings once, naming only the severities found (for example "**1 warning** · risk tier `trivial`"), and no longer repeats the counts as its summary when the judge wrote none. `ocra review` in a terminal drops that repeated line too.
+
+### Deprecated
+
+- `/ocra review`, `/ocra override`, `/ocra dismiss` and `/ocra remember` still work and will be removed in a later release.
+
+## [0.26.0] - 2026-11-24
+
+### Added
+
+- An account's rules take an optional `id`, as `.ocra/rules.json`'s do.
+- A review uploaded with its findings carries the text of each rule they name, redacted and cut at 2,000 characters.
+
+### Changed
+
+- `ocra init` writes a workflow that pins the Action to v0.25.0.
+
+## [0.25.0] - 2026-11-24
+
+### Added
+
+- `ocra learn check` lists the learnings whose paths match no file at HEAD, which reviews no longer give by path, and exits 1 when there is one
+- Every review keeps its trace (ADR-0081): `.ocra/sessions/<id>/trace.json` and `report.trace` lay the run out in time (stages, each task's timed attempts, every plain model call with its model, each reported finding's fate and reason), with no code, prompt or answer text.
+- The ocra Cloud upload carries the trace with the findings, redacted and bounded (`sharedTraceSchema`, `MAX_TRACE_*`).
+- A `model_called` session event per plain completion; `CompletionResult.model` names the model that answered.
+
+### Changed
+
+- `ocra init` writes a workflow that pins the Action to v0.24.1.
+
+## [0.24.1] - 2026-11-24
+
+### Changed
+
+- `ocra init` writes a workflow that pins the Action to v0.24.0.
+
+### Fixed
+
+- `ocra mend --conflicts` authors its merge commit on GitHub with the bot's `<id>+<login>` noreply address, so GitHub links it to the account, also on GitHub Enterprise Server.
+- The comment after a merge round says it merged the base branch and gives `git revert -m 1` to undo it.
+
+## [0.24.0] - 2026-11-24
+
+A finding names the repository rule or learning it applies, so ocra Cloud can count findings per rule. The Action's new tag is `ocrahq/Open-CR-Agent@v0.24.0`.
+
+### Added
+
+- A finding names the repository rule or learning it applies in the report's `rule` (`{ kind, id }`) and in the Cloud upload; `.ocra/rules.json` rules take an optional `id`, and every rule's id is in the report's provenance (ADR-0080).
+
+### Changed
+
+- `ocra init` writes a workflow that pins the Action to v0.23.1.
+
+## [0.23.1] - 2026-11-24
+
+### Changed
+
+- `ocra init` writes a workflow that pins the Action to v0.23.0.
+
+### Fixed
+
+- `ocra mend --checks` reads the last lines of the step that failed (GitHub Actions) or of the job's script (GitLab), not of the whole log, where steps that ran after the failure could push it out. `checkLogTail` in the contract does the same.
+- Redaction keeps a file name that ends in a content hash and an extension (`assets/index-Bx92KqLm.js`) instead of replacing it.
+
+## [0.23.0] - 2026-11-24
+
+A proposed conflict of `ocra mend --conflicts` lists its regions with both sides, and the contract shares how a failed job's log is cut. The Action's new tag is `ocrahq/Open-CR-Agent@v0.23.0`.
+
+### Added
+
+- `checkLogTail` and `CHECK_LOG_LIMITS`: the end of a failed job's log as a round of `ocra mend --checks` reads it, so ocra Cloud shows the same text.
+- `ocra mend --conflicts --level propose` lists each conflicted region with both sides and its answer (`regions` on a proposed conflict item), beside the whole resolved file.
+
+### Changed
+
+- `ocra init` writes a workflow that pins the Action to v0.22.0.
+
 ## [0.22.0] - 2026-11-24
 
 `ocra mend` takes the head's failed checks (`--checks`) and the conflicts of merging the base branch (`--conflicts`) into the fix loop, and a round that commits leaves a note on the change request. The Action's new tag is `ocrahq/Open-CR-Agent@v0.22.0`.
@@ -759,7 +855,14 @@ Known limitations: recall is the weak point (the [quality page](https://ocra.maj
 
 - Agents cannot write files, run commands or browse; likely secret files cannot be read; configuration comes from the base branch; text from the change is fenced off in every prompt.
 
-[Unreleased]: https://github.com/jma49/Open-CR-Agent/compare/v0.22.0...HEAD
+[Unreleased]: https://github.com/jma49/Open-CR-Agent/compare/v0.27.0...HEAD
+[0.27.0]: https://github.com/jma49/Open-CR-Agent/compare/v0.26.0...v0.27.0
+[0.26.0]: https://github.com/jma49/Open-CR-Agent/compare/v0.25.0...v0.26.0
+[0.25.0]: https://github.com/jma49/Open-CR-Agent/compare/v0.24.1...v0.25.0
+[0.24.1]: https://github.com/jma49/Open-CR-Agent/compare/v0.24.0...v0.24.1
+[0.24.0]: https://github.com/jma49/Open-CR-Agent/compare/v0.23.1...v0.24.0
+[0.23.1]: https://github.com/jma49/Open-CR-Agent/compare/v0.23.0...v0.23.1
+[0.23.0]: https://github.com/jma49/Open-CR-Agent/compare/v0.22.0...v0.23.0
 [0.22.0]: https://github.com/jma49/Open-CR-Agent/compare/v0.21.0...v0.22.0
 [0.21.0]: https://github.com/jma49/Open-CR-Agent/compare/v0.20.0...v0.21.0
 [0.20.0]: https://github.com/jma49/Open-CR-Agent/compare/v0.19.0...v0.20.0

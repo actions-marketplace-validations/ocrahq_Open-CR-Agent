@@ -16,7 +16,7 @@ ocra init                            # writes .ocra/config.json and says what it
 ocra review                          # review your uncommitted changes
 ```
 
-For GitHub pull requests, `ocra init --github` also writes `.github/workflows/ocra.yml`, safe for forks, and prints the `gh` commands for the secret and the `ocra-review` label. It never replaces an existing file. See [ocra init](./cli#ocra-init).
+For GitHub pull requests, `ocra init --github` also writes `.github/workflows/ocra.yml`, safe for forks, and `.github/workflows/ocra-commands.yml` for `@ocra` comments, and prints the `gh` commands for the secret and the `ocra-review` label. It never replaces an existing file. See [ocra init](./cli#ocra-init).
 
 The steps below do the same by hand, with any provider OpenCode supports.
 
@@ -88,7 +88,6 @@ ocra prints progress, then the verdict and a report by file. Each finding says w
 Review: Working tree changes
 Risk tier: lite · 2 reviewed · 0 failed · 0 excluded
 Verdict: approved with comments
-  1 finding(s): 0 critical, 1 warning, 0 suggestion.
 
 src/list.ts
   warning    L4        lastItems returns n + 1 items [verified] #3f9a1c2e

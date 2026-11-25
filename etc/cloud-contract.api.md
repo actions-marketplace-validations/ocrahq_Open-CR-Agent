@@ -210,6 +210,9 @@ export const agentRoleSchema: z.ZodEnum<{
 }>;
 
 // @public (undocumented)
+export const ATTEMPT_ENDINGS: readonly ["done", "step_cap", "context_window", "stopped_early", "error"];
+
+// @public (undocumented)
 export type BodyIssue = z.infer<typeof bodyIssueSchema>;
 
 // @public
@@ -343,6 +346,9 @@ export const configSchema: z.ZodObject<{
         requestChanges: z.ZodOptional<z.ZodBoolean>;
         botLogin: z.ZodOptional<z.ZodString>;
     }, z.core.$strict>>;
+    cloud: z.ZodDefault<z.ZodObject<{
+        shareRepoName: z.ZodOptional<z.ZodBoolean>;
+    }, z.core.$strict>>;
     learnings: z.ZodDefault<z.ZodObject<{
         requireReview: z.ZodOptional<z.ZodBoolean>;
     }, z.core.$strict>>;
@@ -397,6 +403,7 @@ export const configSchema: z.ZodObject<{
             input: z.ZodNumber;
             output: z.ZodNumber;
             cachedInput: z.ZodOptional<z.ZodNumber>;
+            contextWindow: z.ZodOptional<z.ZodInt>;
         }, z.core.$strict>>;
         effort: z.ZodOptional<z.ZodEnum<{
             openai: "openai";
@@ -557,6 +564,18 @@ export const fileStatusSchema: z.ZodEnum<{
     unchanged: "unchanged";
     unreviewed: "unreviewed";
 }>;
+
+// @public (undocumented)
+export const FINDING_FATES: readonly ["kept", "outside_review", "refuted", "merged", "dropped", "filtered"];
+
+// @public
+export const FINDING_RULE_ID: RegExp;
+
+// @public
+export const FINDING_RULE_KINDS: readonly ["rule", "learning"];
+
+// @public (undocumented)
+export type FindingFate = (typeof FINDING_FATES)[number];
 
 // @public
 export const FINGERPRINT: RegExp;
@@ -915,6 +934,9 @@ export const MAX_RESOLVED_CHARS = 400000;
 export const MAX_REVIEWERS = 40;
 
 // @public
+export const MAX_RULE_TEXT = 2000;
+
+// @public
 export const MAX_RULES_MARKDOWN_CHARS = 20000;
 
 // @public
@@ -922,6 +944,27 @@ export const MAX_TIMEOUT_MINUTES = 35791;
 
 // @public
 export const MAX_TOTAL_BYTES = 262144;
+
+// @public (undocumented)
+export const MAX_TRACE_ATTEMPTS = 8;
+
+// @public
+export const MAX_TRACE_BYTES = 786432;
+
+// @public
+export const MAX_TRACE_CALLS = 500;
+
+// @public
+export const MAX_TRACE_FINDINGS = 500;
+
+// @public
+export const MAX_TRACE_PATHS = 200;
+
+// @public
+export const MAX_TRACE_TASKS = 500;
+
+// @public
+export const MAX_TRACE_TEXT = 1000;
 
 // @public (undocumented)
 export const MAX_WALKTHROUGH_FILES = 200;
@@ -992,6 +1035,13 @@ export const mendFindingsSchema: z.ZodArray<z.ZodObject<{
         replacement: z.ZodString;
     }, z.core.$strip>>>;
     evidence: z.ZodCatch<z.ZodOptional<z.ZodArray<z.ZodString>>>;
+    rule: z.ZodCatch<z.ZodOptional<z.ZodObject<{
+        kind: z.ZodEnum<{
+            learning: "learning";
+            rule: "rule";
+        }>;
+        id: z.ZodString;
+    }, z.core.$strip>>>;
     lowConfidence: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
     redacted: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
     truncated: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
@@ -1035,6 +1085,12 @@ export const mendResultSchema: z.ZodObject<{
         check: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         conflict: z.ZodDefault<z.ZodNullable<z.ZodString>>;
         resolved: z.ZodDefault<z.ZodNullable<z.ZodString>>;
+        regions: z.ZodDefault<z.ZodArray<z.ZodObject<{
+            line: z.ZodNumber;
+            ours: z.ZodString;
+            theirs: z.ZodString;
+            resolved: z.ZodString;
+        }, z.core.$strip>>>;
         outcome: z.ZodEnum<{
             deferred: "deferred";
             fixed: "fixed";
@@ -1429,6 +1485,7 @@ export const preferencesUpdateSchema: z.ZodObject<{
         include: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodString>>>;
         exclude: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodString>>>;
         rules: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
+            id: z.ZodOptional<z.ZodString>;
             path: z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>;
             rule: z.ZodPipe<z.ZodPipe<z.ZodString, z.ZodTransform<string, string>>, z.ZodString>;
         }, z.core.$strict>>>>;
@@ -1455,6 +1512,7 @@ export const preferencesUpdateSchema: z.ZodObject<{
         include?: string[];
         exclude?: string[];
         rules?: {
+            id?: string | undefined;
             path: string | string[];
             rule: string;
         }[];
@@ -1481,6 +1539,7 @@ export const preferencesUpdateSchema: z.ZodObject<{
         include?: string[] | null | undefined;
         exclude?: string[] | null | undefined;
         rules?: {
+            id?: string | undefined;
             path: string | string[];
             rule: string;
         }[] | null | undefined;
@@ -1782,6 +1841,7 @@ export const reviewSettingsSchema: z.ZodPipe<z.ZodObject<{
     include: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodString>>>;
     exclude: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodString>>>;
     rules: z.ZodOptional<z.ZodNullable<z.ZodArray<z.ZodObject<{
+        id: z.ZodOptional<z.ZodString>;
         path: z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>;
         rule: z.ZodPipe<z.ZodPipe<z.ZodString, z.ZodTransform<string, string>>, z.ZodString>;
     }, z.core.$strict>>>>;
@@ -1808,6 +1868,7 @@ export const reviewSettingsSchema: z.ZodPipe<z.ZodObject<{
     include?: string[];
     exclude?: string[];
     rules?: {
+        id?: string | undefined;
         path: string | string[];
         rule: string;
     }[];
@@ -1834,6 +1895,7 @@ export const reviewSettingsSchema: z.ZodPipe<z.ZodObject<{
     include?: string[] | null | undefined;
     exclude?: string[] | null | undefined;
     rules?: {
+        id?: string | undefined;
         path: string | string[];
         rule: string;
     }[] | null | undefined;
@@ -1945,6 +2007,13 @@ export const reviewUploadSchema: z.ZodObject<{
             replacement: z.ZodString;
         }, z.core.$strip>>>;
         evidence: z.ZodCatch<z.ZodOptional<z.ZodArray<z.ZodString>>>;
+        rule: z.ZodCatch<z.ZodOptional<z.ZodObject<{
+            kind: z.ZodEnum<{
+                learning: "learning";
+                rule: "rule";
+            }>;
+            id: z.ZodString;
+        }, z.core.$strip>>>;
         lowConfidence: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
         redacted: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
         truncated: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
@@ -1992,6 +2061,139 @@ export const reviewUploadSchema: z.ZodObject<{
         repository: z.ZodString;
         number: z.ZodNumber;
         headSha: z.ZodString;
+    }, z.core.$strip>>>;
+    repo: z.ZodCatch<z.ZodOptional<z.ZodObject<{
+        name: z.ZodString;
+        url: z.ZodCatch<z.ZodOptional<z.ZodString>>;
+    }, z.core.$strip>>>;
+    trace: z.ZodCatch<z.ZodOptional<z.ZodObject<{
+        startedAt: z.ZodISODateTime;
+        ms: z.ZodNumber;
+        stages: z.ZodArray<z.ZodObject<{
+            stage: z.ZodEnum<{
+                bundle: "bundle";
+                filter: "filter";
+                fix: "fix";
+                judge: "judge";
+                plan: "plan";
+                review: "review";
+                select: "select";
+                verify: "verify";
+            }>;
+            startMs: z.ZodNumber;
+            ms: z.ZodNumber;
+        }, z.core.$strip>>;
+        tasks: z.ZodArray<z.ZodObject<{
+            id: z.ZodString;
+            reviewer: z.ZodString;
+            bundle: z.ZodString;
+            files: z.ZodArray<z.ZodString>;
+            status: z.ZodEnum<{
+                cancelled: "cancelled";
+                completed: "completed";
+                failed: "failed";
+                timed_out: "timed_out";
+            }>;
+            startMs: z.ZodOptional<z.ZodNumber>;
+            ms: z.ZodOptional<z.ZodNumber>;
+            reused: z.ZodOptional<z.ZodLiteral<true>>;
+            usage: z.ZodObject<{
+                inputTokens: z.ZodNumber;
+                cachedTokens: z.ZodNumber;
+                outputTokens: z.ZodNumber;
+                reasoningTokens: z.ZodNumber;
+                costUsd: z.ZodNumber;
+            }, z.core.$strip>;
+            attempts: z.ZodArray<z.ZodObject<{
+                model: z.ZodString;
+                startMs: z.ZodNumber;
+                ms: z.ZodNumber;
+                steps: z.ZodNumber;
+                tools: z.ZodRecord<z.ZodString, z.ZodNumber>;
+                ending: z.ZodEnum<{
+                    context_window: "context_window";
+                    done: "done";
+                    error: "error";
+                    step_cap: "step_cap";
+                    stopped_early: "stopped_early";
+                }>;
+                read: z.ZodArray<z.ZodString>;
+                searches: z.ZodNumber;
+                usage: z.ZodObject<{
+                    inputTokens: z.ZodNumber;
+                    cachedTokens: z.ZodNumber;
+                    outputTokens: z.ZodNumber;
+                    reasoningTokens: z.ZodNumber;
+                    costUsd: z.ZodNumber;
+                }, z.core.$strip>;
+            }, z.core.$strip>>;
+        }, z.core.$strip>>;
+        calls: z.ZodArray<z.ZodObject<{
+            agent: z.ZodString;
+            stage: z.ZodOptional<z.ZodEnum<{
+                bundle: "bundle";
+                filter: "filter";
+                fix: "fix";
+                judge: "judge";
+                plan: "plan";
+                review: "review";
+                select: "select";
+                verify: "verify";
+            }>>;
+            model: z.ZodOptional<z.ZodString>;
+            startMs: z.ZodNumber;
+            ms: z.ZodNumber;
+            usage: z.ZodObject<{
+                inputTokens: z.ZodNumber;
+                cachedTokens: z.ZodNumber;
+                outputTokens: z.ZodNumber;
+                reasoningTokens: z.ZodNumber;
+                costUsd: z.ZodNumber;
+            }, z.core.$strip>;
+            failed: z.ZodOptional<z.ZodLiteral<true>>;
+        }, z.core.$strip>>;
+        findings: z.ZodArray<z.ZodObject<{
+            fingerprint: z.ZodOptional<z.ZodString>;
+            taskId: z.ZodOptional<z.ZodString>;
+            reviewer: z.ZodOptional<z.ZodString>;
+            severity: z.ZodOptional<z.ZodEnum<{
+                critical: "critical";
+                suggestion: "suggestion";
+                warning: "warning";
+            }>>;
+            file: z.ZodString;
+            line: z.ZodOptional<z.ZodNumber>;
+            title: z.ZodString;
+            atMs: z.ZodOptional<z.ZodNumber>;
+            fate: z.ZodEnum<{
+                dropped: "dropped";
+                filtered: "filtered";
+                kept: "kept";
+                merged: "merged";
+                outside_review: "outside_review";
+                refuted: "refuted";
+            }>;
+            reason: z.ZodOptional<z.ZodString>;
+            mergedInto: z.ZodOptional<z.ZodString>;
+            recalibrated: z.ZodOptional<z.ZodObject<{
+                from: z.ZodEnum<{
+                    critical: "critical";
+                    suggestion: "suggestion";
+                    warning: "warning";
+                }>;
+                to: z.ZodEnum<{
+                    critical: "critical";
+                    suggestion: "suggestion";
+                    warning: "warning";
+                }>;
+                reason: z.ZodString;
+            }, z.core.$strip>>;
+        }, z.core.$strip>>;
+        redacted: z.ZodOptional<z.ZodLiteral<true>>;
+        truncated: z.ZodOptional<z.ZodLiteral<true>>;
+    }, z.core.$strip>>>;
+    provenance: z.ZodCatch<z.ZodOptional<z.ZodObject<{
+        rules: z.ZodRecord<z.ZodString, z.ZodString>;
     }, z.core.$strip>>>;
 }, z.core.$strip>;
 
@@ -2079,6 +2281,13 @@ export const sharedFindingSchema: z.ZodObject<{
         replacement: z.ZodString;
     }, z.core.$strip>>>;
     evidence: z.ZodCatch<z.ZodOptional<z.ZodArray<z.ZodString>>>;
+    rule: z.ZodCatch<z.ZodOptional<z.ZodObject<{
+        kind: z.ZodEnum<{
+            learning: "learning";
+            rule: "rule";
+        }>;
+        id: z.ZodString;
+    }, z.core.$strip>>>;
     lowConfidence: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
     redacted: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
     truncated: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
@@ -2129,6 +2338,146 @@ export const sharedMergeCheckSchema: z.ZodObject<{
     reason: z.ZodCatch<z.ZodOptional<z.ZodString>>;
     redacted: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
     truncated: z.ZodCatch<z.ZodOptional<z.ZodLiteral<true>>>;
+}, z.core.$strip>;
+
+// @public (undocumented)
+export type SharedRepo = z.input<typeof sharedRepoSchema>;
+
+// @public
+export const sharedRepoSchema: z.ZodObject<{
+    name: z.ZodString;
+    url: z.ZodCatch<z.ZodOptional<z.ZodString>>;
+}, z.core.$strip>;
+
+// @public (undocumented)
+export type SharedTrace = z.input<typeof sharedTraceSchema>;
+
+// @public (undocumented)
+export const sharedTraceSchema: z.ZodObject<{
+    startedAt: z.ZodISODateTime;
+    ms: z.ZodNumber;
+    stages: z.ZodArray<z.ZodObject<{
+        stage: z.ZodEnum<{
+            bundle: "bundle";
+            filter: "filter";
+            fix: "fix";
+            judge: "judge";
+            plan: "plan";
+            review: "review";
+            select: "select";
+            verify: "verify";
+        }>;
+        startMs: z.ZodNumber;
+        ms: z.ZodNumber;
+    }, z.core.$strip>>;
+    tasks: z.ZodArray<z.ZodObject<{
+        id: z.ZodString;
+        reviewer: z.ZodString;
+        bundle: z.ZodString;
+        files: z.ZodArray<z.ZodString>;
+        status: z.ZodEnum<{
+            cancelled: "cancelled";
+            completed: "completed";
+            failed: "failed";
+            timed_out: "timed_out";
+        }>;
+        startMs: z.ZodOptional<z.ZodNumber>;
+        ms: z.ZodOptional<z.ZodNumber>;
+        reused: z.ZodOptional<z.ZodLiteral<true>>;
+        usage: z.ZodObject<{
+            inputTokens: z.ZodNumber;
+            cachedTokens: z.ZodNumber;
+            outputTokens: z.ZodNumber;
+            reasoningTokens: z.ZodNumber;
+            costUsd: z.ZodNumber;
+        }, z.core.$strip>;
+        attempts: z.ZodArray<z.ZodObject<{
+            model: z.ZodString;
+            startMs: z.ZodNumber;
+            ms: z.ZodNumber;
+            steps: z.ZodNumber;
+            tools: z.ZodRecord<z.ZodString, z.ZodNumber>;
+            ending: z.ZodEnum<{
+                context_window: "context_window";
+                done: "done";
+                error: "error";
+                step_cap: "step_cap";
+                stopped_early: "stopped_early";
+            }>;
+            read: z.ZodArray<z.ZodString>;
+            searches: z.ZodNumber;
+            usage: z.ZodObject<{
+                inputTokens: z.ZodNumber;
+                cachedTokens: z.ZodNumber;
+                outputTokens: z.ZodNumber;
+                reasoningTokens: z.ZodNumber;
+                costUsd: z.ZodNumber;
+            }, z.core.$strip>;
+        }, z.core.$strip>>;
+    }, z.core.$strip>>;
+    calls: z.ZodArray<z.ZodObject<{
+        agent: z.ZodString;
+        stage: z.ZodOptional<z.ZodEnum<{
+            bundle: "bundle";
+            filter: "filter";
+            fix: "fix";
+            judge: "judge";
+            plan: "plan";
+            review: "review";
+            select: "select";
+            verify: "verify";
+        }>>;
+        model: z.ZodOptional<z.ZodString>;
+        startMs: z.ZodNumber;
+        ms: z.ZodNumber;
+        usage: z.ZodObject<{
+            inputTokens: z.ZodNumber;
+            cachedTokens: z.ZodNumber;
+            outputTokens: z.ZodNumber;
+            reasoningTokens: z.ZodNumber;
+            costUsd: z.ZodNumber;
+        }, z.core.$strip>;
+        failed: z.ZodOptional<z.ZodLiteral<true>>;
+    }, z.core.$strip>>;
+    findings: z.ZodArray<z.ZodObject<{
+        fingerprint: z.ZodOptional<z.ZodString>;
+        taskId: z.ZodOptional<z.ZodString>;
+        reviewer: z.ZodOptional<z.ZodString>;
+        severity: z.ZodOptional<z.ZodEnum<{
+            critical: "critical";
+            suggestion: "suggestion";
+            warning: "warning";
+        }>>;
+        file: z.ZodString;
+        line: z.ZodOptional<z.ZodNumber>;
+        title: z.ZodString;
+        atMs: z.ZodOptional<z.ZodNumber>;
+        fate: z.ZodEnum<{
+            dropped: "dropped";
+            filtered: "filtered";
+            kept: "kept";
+            merged: "merged";
+            outside_review: "outside_review";
+            refuted: "refuted";
+        }>;
+        reason: z.ZodOptional<z.ZodString>;
+        mergedInto: z.ZodOptional<z.ZodString>;
+        recalibrated: z.ZodOptional<z.ZodObject<{
+            from: z.ZodEnum<{
+                critical: "critical";
+                suggestion: "suggestion";
+                warning: "warning";
+            }>;
+            to: z.ZodEnum<{
+                critical: "critical";
+                suggestion: "suggestion";
+                warning: "warning";
+            }>;
+            reason: z.ZodString;
+        }, z.core.$strip>>;
+    }, z.core.$strip>>;
+    redacted: z.ZodOptional<z.ZodLiteral<true>>;
+    truncated: z.ZodOptional<z.ZodLiteral<true>>;
 }, z.core.$strip>;
 
 // @public (undocumented)

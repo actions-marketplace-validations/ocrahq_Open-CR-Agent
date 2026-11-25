@@ -64,6 +64,8 @@ export type AgentRole = "verifier" | "judge" | "helper" | "writer" | "fixer";
 // @public (undocumented)
 export interface AgentRuntime {
     // (undocumented)
+    readonly agent?: string;
+    // (undocumented)
     appliedTo?(agent: string): AppliedSettings | undefined;
     // (undocumented)
     complete?(request: CompletionRequest, signal: AbortSignal): Promise<CompletionResult>;
@@ -173,6 +175,8 @@ export interface AttemptError {
 // @public (undocumented)
 export interface AttemptOutcome {
     // (undocumented)
+    atContextWindow?: true;
+    // (undocumented)
     atStepCap?: true;
     // (undocumented)
     error?: AttemptError;
@@ -203,13 +207,23 @@ export interface AttemptOutcome {
 // @public (undocumented)
 export interface AttemptRecord {
     // (undocumented)
+    ending?: "done" | IncompleteEnding | "error";
+    // (undocumented)
     model: string;
+    // (undocumented)
+    ms?: number;
     // (undocumented)
     read: string[];
     // (undocumented)
     searched: string[];
     // (undocumented)
+    steps?: number;
+    // (undocumented)
     text: string;
+    // (undocumented)
+    tools?: Record<string, number>;
+    // (undocumented)
+    usage?: Usage;
 }
 
 // @public (undocumented)
@@ -365,6 +379,8 @@ export interface CompletionRequest {
 // @public (undocumented)
 export interface CompletionResult {
     // (undocumented)
+    model?: string;
+    // (undocumented)
     text: string;
     // (undocumented)
     usage: Usage;
@@ -436,7 +452,7 @@ export interface CustomProvider {
     // (undocumented)
     effort?: "openai" | "openrouter";
     // (undocumented)
-    models: Readonly<Record<string, ModelPrice>>;
+    models: Readonly<Record<string, ProviderModel>>;
     // (undocumented)
     toolCalls?: "api" | "text";
 }
@@ -591,6 +607,12 @@ export interface Finding extends ReportedFinding {
 }
 
 // @public (undocumented)
+export const FINDING_FATES: readonly ["kept", "outside_review", "refuted", "merged", "dropped", "filtered"];
+
+// @public (undocumented)
+export type FindingFate = (typeof FINDING_FATES)[number];
+
+// @public (undocumented)
 export interface FindingFix {
     // (undocumented)
     endLine: number;
@@ -607,6 +629,18 @@ export interface FindingProvenance {
     // (undocumented)
     task: string;
 }
+
+// @public (undocumented)
+export type FindingRule = z.infer<typeof findingRuleSchema>;
+
+// @public (undocumented)
+const findingRuleSchema: z.ZodObject<{
+    kind: z.ZodEnum<{
+        learning: "learning";
+        rule: "rule";
+    }>;
+    id: z.ZodString;
+}, z.core.$strip>;
 
 // @public (undocumented)
 export type FindingStatus = z.infer<typeof findingStatusSchema>;
@@ -660,7 +694,7 @@ export interface Hunk {
 }
 
 // @public (undocumented)
-const INCOMPLETE_ENDINGS: readonly ["step_cap", "stopped_early"];
+const INCOMPLETE_ENDINGS: readonly ["step_cap", "context_window", "stopped_early"];
 
 // @public (undocumented)
 export type IncompleteEnding = (typeof INCOMPLETE_ENDINGS)[number];
@@ -1169,6 +1203,12 @@ export interface ProvenanceInput {
 }
 
 // @public (undocumented)
+export interface ProviderModel extends ModelPrice {
+    // (undocumented)
+    contextWindow?: number;
+}
+
+// @public (undocumented)
 export function proxiedFetch(env: ProxyEnv): typeof fetch;
 
 // @public (undocumented)
@@ -1261,6 +1301,13 @@ const reportedFindingSchema: z.ZodObject<{
     body: z.ZodString;
     suggestion: z.ZodOptional<z.ZodString>;
     evidence: z.ZodDefault<z.ZodArray<z.ZodString>>;
+    rule: z.ZodOptional<z.ZodObject<{
+        kind: z.ZodEnum<{
+            learning: "learning";
+            rule: "rule";
+        }>;
+        id: z.ZodString;
+    }, z.core.$strip>>;
 }, z.core.$strip>;
 
 // @public (undocumented)
@@ -1315,6 +1362,7 @@ export const reportOutputSchema: z.ZodObject<{
         path: z.ZodString;
         status: z.ZodLiteral<"incomplete">;
         ended: z.ZodEnum<{
+            context_window: "context_window";
             step_cap: "step_cap";
             stopped_early: "stopped_early";
         }>;
@@ -1364,6 +1412,13 @@ export const reportOutputSchema: z.ZodObject<{
             replacement: z.ZodString;
         }, z.core.$strict>>;
         evidence: z.ZodArray<z.ZodString>;
+        rule: z.ZodExactOptional<z.ZodObject<{
+            kind: z.ZodEnum<{
+                learning: "learning";
+                rule: "rule";
+            }>;
+            id: z.ZodString;
+        }, z.core.$strict>>;
         code: z.ZodString;
         lowConfidence: z.ZodExactOptional<z.ZodLiteral<true>>;
         preExisting: z.ZodExactOptional<z.ZodLiteral<true>>;
@@ -1589,6 +1644,7 @@ export const reportOutputSchema: z.ZodObject<{
             rate_limit: "rate_limit";
         }>>;
         ended: z.ZodExactOptional<z.ZodEnum<{
+            context_window: "context_window";
             step_cap: "step_cap";
             stopped_early: "stopped_early";
         }>>;
@@ -1687,6 +1743,7 @@ export const reportOutputSchema: z.ZodObject<{
             }>>>;
         }, z.core.$strict>>>;
         rules: z.ZodExactOptional<z.ZodArray<z.ZodObject<{
+            id: z.ZodExactOptional<z.ZodString>;
             path: z.ZodArray<z.ZodString>;
             rule: z.ZodString;
             source: z.ZodExactOptional<z.ZodEnum<{
@@ -1715,6 +1772,7 @@ export type RepoRule = z.infer<typeof repoRuleSchema>;
 
 // @public (undocumented)
 const repoRuleSchema: z.ZodObject<{
+    id: z.ZodOptional<z.ZodString>;
     path: z.ZodUnion<readonly [z.ZodString, z.ZodArray<z.ZodString>]>;
     rule: z.ZodString;
 }, z.core.$strip>;
@@ -1807,6 +1865,11 @@ export type ReviewerOverrides = Readonly<Record<string, ReviewerOverride>>;
 // @public (undocumented)
 export interface ReviewerScope {
     // (undocumented)
+    focus?: {
+        words: ReadonlySet<string>;
+        minTier: RiskTier;
+    };
+    // (undocumented)
     ignore?: readonly string[];
     // (undocumented)
     minTier?: RiskTier;
@@ -1878,6 +1941,13 @@ export type ReviewEvent = {
     type: "usage_reported";
     usage: Usage;
 } | {
+    type: "model_called";
+    agent: string;
+    model?: string;
+    ms: number;
+    usage: Usage;
+    failed?: true;
+} | {
     type: "findings_verified";
     file: string;
     kept: Finding[];
@@ -1900,6 +1970,8 @@ export type ReviewEvent = {
 export interface ReviewLimits {
     // (undocumented)
     concurrency?: number;
+    // (undocumented)
+    contextWindow?: number;
     // (undocumented)
     maxCostUsd?: number;
     // (undocumented)
@@ -1987,6 +2059,8 @@ export interface ReviewOptions {
 // @public (undocumented)
 export interface ReviewReport {
     // (undocumented)
+    agent?: string;
+    // (undocumented)
     analyzerEvidence?: AnalyzerEvidenceUse[];
     // (undocumented)
     anchoring?: AnchoringSummary;
@@ -2053,6 +2127,8 @@ export interface ReviewReport {
     // (undocumented)
     tier: RiskTier;
     // (undocumented)
+    trace?: ReviewTrace;
+    // (undocumented)
     unverifiedCriticals: number;
     // (undocumented)
     usage: Usage;
@@ -2088,6 +2164,22 @@ export type ReviewToolName = (typeof REVIEW_TOOLS)[keyof typeof REVIEW_TOOLS];
 export const reviewTools: readonly ToolDefinition[];
 
 // @public (undocumented)
+export interface ReviewTrace {
+    // (undocumented)
+    calls: TraceCall[];
+    // (undocumented)
+    findings: TraceFinding[];
+    // (undocumented)
+    ms: number;
+    // (undocumented)
+    stages: TraceStage[];
+    // (undocumented)
+    startedAt: string;
+    // (undocumented)
+    tasks: TraceTask[];
+}
+
+// @public (undocumented)
 export type RiskTier = z.infer<typeof riskTierSchema>;
 
 // @public (undocumented)
@@ -2121,6 +2213,8 @@ export interface RoundNote {
         outcome: string;
         reason?: string;
     })[];
+    // (undocumented)
+    merge?: boolean;
 }
 
 // @public (undocumented)
@@ -2135,6 +2229,8 @@ export interface RoundNoteItem {
 
 // @public (undocumented)
 export interface RuleProvenance {
+    // (undocumented)
+    id?: string;
     // (undocumented)
     path: string[];
     // (undocumented)
@@ -2520,6 +2616,112 @@ export interface ToolUse {
 export function toReportOutput(report: ReviewReport): ReportOutput;
 
 // @public (undocumented)
+export interface TraceAttempt {
+    // (undocumented)
+    ending: NonNullable<AttemptRecord["ending"]>;
+    // (undocumented)
+    model: string;
+    // (undocumented)
+    ms: number;
+    // (undocumented)
+    read: string[];
+    // (undocumented)
+    searches: number;
+    // (undocumented)
+    startMs: number;
+    // (undocumented)
+    steps: number;
+    // (undocumented)
+    tools: Record<string, number>;
+    // (undocumented)
+    usage: Usage;
+}
+
+// @public (undocumented)
+export interface TraceCall {
+    // (undocumented)
+    agent: string;
+    // (undocumented)
+    failed?: true;
+    // (undocumented)
+    model?: string;
+    // (undocumented)
+    ms: number;
+    // (undocumented)
+    stage?: ReviewStage;
+    // (undocumented)
+    startMs: number;
+    // (undocumented)
+    usage: Usage;
+}
+
+// @public (undocumented)
+export interface TraceFinding {
+    // (undocumented)
+    atMs?: number;
+    // (undocumented)
+    fate: FindingFate;
+    // (undocumented)
+    file: string;
+    // (undocumented)
+    fingerprint?: string;
+    // (undocumented)
+    line?: number;
+    // (undocumented)
+    mergedInto?: string;
+    // (undocumented)
+    reason?: string;
+    // (undocumented)
+    recalibrated?: {
+        from: Severity;
+        to: Severity;
+        reason: string;
+    };
+    // (undocumented)
+    reviewer?: string;
+    // (undocumented)
+    severity?: Severity;
+    // (undocumented)
+    taskId?: string;
+    // (undocumented)
+    title: string;
+}
+
+// @public (undocumented)
+export interface TraceStage {
+    // (undocumented)
+    ms: number;
+    // (undocumented)
+    stage: ReviewStage;
+    // (undocumented)
+    startMs: number;
+}
+
+// @public (undocumented)
+export interface TraceTask {
+    // (undocumented)
+    attempts: TraceAttempt[];
+    // (undocumented)
+    bundle: string;
+    // (undocumented)
+    files: string[];
+    // (undocumented)
+    id: string;
+    // (undocumented)
+    ms?: number;
+    // (undocumented)
+    reusedFrom?: string;
+    // (undocumented)
+    reviewer: string;
+    // (undocumented)
+    startMs?: number;
+    // (undocumented)
+    status: TaskStatus;
+    // (undocumented)
+    usage: Usage;
+}
+
+// @public (undocumented)
 export interface Usage {
     // (undocumented)
     cachedTokens: number;
@@ -2565,6 +2767,14 @@ export interface VcsAdapter {
     readFile(path: string): Promise<string | undefined>;
     // (undocumented)
     searchCode(literal: string): Promise<CodeMatch[]>;
+    // (undocumented)
+    started?(): Promise<{
+        warnings: string[];
+    }>;
+    // (undocumented)
+    stopped?(reason: string): Promise<{
+        warnings: string[];
+    }>;
 }
 
 // @public (undocumented)

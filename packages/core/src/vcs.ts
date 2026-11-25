@@ -97,6 +97,8 @@ export interface RoundNoteItem {
 // loop's own words (MEND_ITEM_OUTCOMES, MEND_ITEM_REASONS).
 export interface RoundNote {
   commitSha: string;
+  // The commit merges the base branch, so undoing it names the parent kept.
+  merge?: boolean;
   fixed: RoundNoteItem[];
   left: (RoundNoteItem & { outcome: string; reason?: string })[];
 }
@@ -112,6 +114,10 @@ export interface VcsAdapter {
   getPriorReview(): Promise<PriorReview | undefined>;
   // Warnings describe parts that could not be published; the rest was.
   publish(report: ReviewReport): Promise<{ warnings: string[] }>;
+  // Shows on the change request that a review of its head is running, until
+  // publish or stopped says how it ended. Absent: nowhere to show it.
+  started?(): Promise<{ warnings: string[] }>;
+  stopped?(reason: string): Promise<{ warnings: string[] }>;
   // Absent: the adapter takes no questions.
   mention?(ref: MentionRef): Promise<Mention>;
   // The files directly in a directory of the reviewed revision, as readFile

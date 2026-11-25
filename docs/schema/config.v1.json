@@ -362,6 +362,16 @@
       },
       "additionalProperties": false
     },
+    "cloud": {
+      "default": {},
+      "type": "object",
+      "properties": {
+        "shareRepoName": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
     "learnings": {
       "default": {},
       "type": "object",
@@ -561,6 +571,11 @@
                   "type": "number",
                   "minimum": 0,
                   "maximum": 10000
+                },
+                "contextWindow": {
+                  "type": "integer",
+                  "minimum": 8000,
+                  "maximum": 10000000
                 }
               },
               "required": [

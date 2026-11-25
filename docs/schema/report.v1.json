@@ -154,6 +154,7 @@
                 "type": "string",
                 "enum": [
                   "step_cap",
+                  "context_window",
                   "stopped_early"
                 ]
               }
@@ -299,6 +300,26 @@
             "items": {
               "type": "string"
             }
+          },
+          "rule": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "rule",
+                  "learning"
+                ]
+              },
+              "id": {
+                "type": "string"
+              }
+            },
+            "required": [
+              "kind",
+              "id"
+            ],
+            "additionalProperties": false
           },
           "code": {
             "type": "string"
@@ -1066,6 +1087,7 @@
             "type": "string",
             "enum": [
               "step_cap",
+              "context_window",
               "stopped_early"
             ]
           },
@@ -1391,6 +1413,9 @@
           "items": {
             "type": "object",
             "properties": {
+              "id": {
+                "type": "string"
+              },
               "path": {
                 "type": "array",
                 "items": {

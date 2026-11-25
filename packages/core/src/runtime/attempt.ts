@@ -49,6 +49,9 @@ export interface AttemptOutcome {
   // the runtime knows: OpenCode caps each turn, so a resumed session's steps
   // add up past the cap without either turn reaching it.
   atStepCap?: true;
+  // Its last turn stopped because the next request would not fit the
+  // model's declared context window (ADR-0071).
+  atContextWindow?: true;
   // Distinct paths it passed to read_file and the literals it passed to
   // code_search, in order (exploredBy).
   read?: string[];
@@ -110,11 +113,10 @@ function wrapUpSummary(wrapUp: WrapUpOutcome | undefined): string {
 
 export function toolSummary(toolCalls: readonly string[]): string {
   if (toolCalls.length === 0) return "no tool calls";
-  const names = toolCalls;
-  const counts = new Map<string, number>();
-  for (const name of names) counts.set(name, (counts.get(name) ?? 0) + 1);
-  const byUse = [...counts].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
-  const finished = names.includes(REVIEW_TOOLS.taskDone) ? "" : "; no task_done";
+  const byUse = Object.entries(toolCounts(toolCalls)).sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  );
+  const finished = toolCalls.includes(REVIEW_TOOLS.taskDone) ? "" : "; no task_done";
   return `${toolCalls.length} tool call(s) (${byUse.map(([n, c]) => `${n} ${c}`).join(", ")}${finished})`;
 }
 
@@ -126,7 +128,8 @@ export type AttemptEnding = "done" | IncompleteEnding | "error";
 export function attemptEnding(outcome: AttemptOutcome): AttemptEnding {
   if (outcome.error) return "error";
   if (outcome.toolCalls.includes(REVIEW_TOOLS.taskDone)) return "done";
-  return outcome.atStepCap ? "step_cap" : "stopped_early";
+  if (outcome.atStepCap) return "step_cap";
+  return outcome.atContextWindow ? "context_window" : "stopped_early";
 }
 
 export interface ToolUse {
@@ -170,7 +173,12 @@ function distinct(
   return [...values];
 }
 
-export function attemptRecord(model: string, outcome: AttemptOutcome): AttemptRecord {
+// ending: as read before any wrap-up turn (attemptEnding).
+export function attemptRecord(
+  model: string,
+  outcome: AttemptOutcome,
+  run: { ending: AttemptEnding; ms: number },
+): AttemptRecord {
   return {
     model,
     read: outcome.read ?? [],
@@ -180,7 +188,18 @@ export function attemptRecord(model: string, outcome: AttemptOutcome): AttemptRe
       outcome.text.length > MAX_TEXT_CHARS
         ? `…${outcome.text.slice(-MAX_TEXT_CHARS)}`
         : outcome.text,
+    steps: outcome.steps,
+    tools: toolCounts(outcome.toolCalls),
+    ending: run.ending,
+    usage: outcome.usage,
+    ms: run.ms,
   };
+}
+
+function toolCounts(toolCalls: readonly string[]): Record<string, number> {
+  const counts: Record<string, number> = {};
+  for (const name of toolCalls) counts[name] = (counts[name] ?? 0) + 1;
+  return counts;
 }
 
 function cut(text: string, max: number): string {

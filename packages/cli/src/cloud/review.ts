@@ -10,7 +10,10 @@ import { type SharedFindings, sharedFindings, sharedOutcomes } from "./findings.
 import { sharedLinkedTasks } from "./linked-tasks.js";
 import { accountHasMemory, fetchAccountMemory } from "./memory.js";
 import { sharedMergeChecks } from "./merge-checks.js";
+import { sharedRepo } from "./repo-name.js";
+import { sharedRuleTexts } from "./rule-texts.js";
 import { hasSharingConsent, saveSharingConsent } from "./sharing-consent.js";
+import { sharedTrace } from "./trace.js";
 import { repoHash, uploadOf, uploadReview } from "./upload.js";
 import { sharedWalkthrough } from "./walkthrough.js";
 
@@ -150,7 +153,12 @@ async function keepAccountSalt(
 export function cloudUpload(
   report: ReviewReport,
   cloud: Pick<CloudReview, "repository" | "repoHash" | "shareFindings">,
-  run: { source: ReviewSource; durationMs: number; changeRequestNumber?: number },
+  run: {
+    source: ReviewSource;
+    durationMs: number;
+    changeRequestNumber?: number;
+    shareRepoName?: boolean;
+  },
 ): { upload: ReviewUpload; shared?: SharedFindings } {
   const number = run.changeRequestNumber;
   const changeRequest = number === undefined ? undefined : { repository: cloud.repository, number };
@@ -174,15 +182,23 @@ export function cloudUpload(
     cloud.shareFindings && counts.outcomes
       ? { outcomes: { ...counts.outcomes, ...sharedOutcomes(report) } }
       : {};
+  // The trace names files, findings and why each was dropped, like the findings.
+  const trace = cloud.shareFindings && report.trace ? sharedTrace(report.trace) : undefined;
+  const shared = cloud.shareFindings ? sharedFindings(report) : undefined;
+  const provenance = shared && sharedRuleTexts(report, shared.findings);
+  const repo = run.shareRepoName ? sharedRepo(cloud.repository) : undefined;
   const upload = {
     ...counts,
+    ...(repo ? { repo } : {}),
     ...outcomes,
     ...(walkthrough ? { walkthrough } : {}),
     ...(linkedTasks ? { linkedTasks } : {}),
     ...(learnings ? { learnings } : {}),
     ...(mergeChecks ? { mergeChecks } : {}),
+    ...(trace ? { trace } : {}),
+    ...(provenance ? { provenance } : {}),
   };
-  return cloud.shareFindings ? { upload, shared: sharedFindings(report) } : { upload };
+  return shared ? { upload, shared } : { upload };
 }
 
 /** Sends the counts, and the findings when the account shares them. */
@@ -194,6 +210,7 @@ export async function sendToCloud(
     source: ReviewSource;
     durationMs: number;
     changeRequestNumber?: number;
+    shareRepoName?: boolean;
     err: Output;
     warn: (message: string) => void;
   },

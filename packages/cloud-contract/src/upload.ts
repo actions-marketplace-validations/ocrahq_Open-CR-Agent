@@ -1,9 +1,17 @@
 import { z } from "zod";
 import { LEARNING_ID, MAX_LEARNINGS } from "./learnings.js";
-import { MAX_EVIDENCE, MAX_EVIDENCE_FIELD, MAX_FIELD, MAX_FINDINGS } from "./limits.js";
-import { MAX_MERGE_CHECKS, sharedMergeCheckSchema } from "./merge-checks.js";
-import { REPOSITORY_URL } from "./repository.js";
 import {
+  MAX_EVIDENCE,
+  MAX_EVIDENCE_FIELD,
+  MAX_FIELD,
+  MAX_FINDINGS,
+  MAX_RULE_TEXT,
+} from "./limits.js";
+import { MAX_MERGE_CHECKS, sharedMergeCheckSchema } from "./merge-checks.js";
+import { normaliseRemote, REPOSITORY_URL } from "./repository.js";
+import { sharedTraceSchema } from "./trace.js";
+import {
+  FINGERPRINT,
   REPO_HASH,
   REVIEWER_ID,
   reviewSourceSchema,
@@ -12,6 +20,8 @@ import {
   verdictSchema,
   verificationSchema,
 } from "./vocabulary.js";
+
+export { FINGERPRINT };
 
 // POST /api/reviews: what a signed-in CLI sends after a review (ADR-0024,
 // ADR-0028), and what ocra Cloud answers.
@@ -38,8 +48,11 @@ export const reviewerCountsSchema = z.object({
 });
 export type ReviewerCounts = z.input<typeof reviewerCountsSchema>;
 
-/** A finding's stable id across runs. */
-export const FINGERPRINT = /^[\w:.-]{4,128}$/;
+/** What a finding names as the rule it applies: a repository rule or a learning (ADR-0080). */
+export const FINDING_RULE_KINDS = ["rule", "learning"] as const;
+/** A rule's or a learning's id, as the review report gives it. */
+export const FINDING_RULE_ID = /^[a-z0-9][a-z0-9-]{0,79}$/;
+
 const line = z.number().int().min(0).lt(10_000_000).nullable().catch(null);
 const fixLine = z.number().int().positive().lt(10_000_000);
 
@@ -79,6 +92,11 @@ export const sharedFindingSchema = z.object({
   evidence: z
     .array(z.string().max(MAX_EVIDENCE_FIELD))
     .max(MAX_EVIDENCE)
+    .optional()
+    .catch(undefined),
+  // The rule or learning the finding applies; the report's provenance holds a rule's text.
+  rule: z
+    .object({ kind: z.enum(FINDING_RULE_KINDS), id: z.string().regex(FINDING_RULE_ID) })
     .optional()
     .catch(undefined),
   // Kept by --ultra though the judge would drop it; `ocra fix` asks no fix for it.
@@ -142,6 +160,29 @@ export const sharedLinkedTaskSchema = z.object({
   labels: z.array(z.string().max(256)).max(10).optional().catch(undefined),
 });
 export type SharedLinkedTask = z.input<typeof sharedLinkedTaskSchema>;
+
+/** A repository's path on its host: `owner/name`, or more segments on GitLab. */
+const REPO_NAME = /^[\w.-]+(?:\/[\w.-]+)+$/;
+
+/**
+ * Which repository a review is of, sent only when the configuration opts
+ * in (`cloud.shareRepoName`): its path, and its address in the normalised
+ * form the hash is made from, so no user, password or port.
+ */
+export const sharedRepoSchema = z.object({
+  name: z
+    .string()
+    .max(200)
+    .regex(REPO_NAME)
+    .refine((name) => name.split("/").every((part) => !/^\.+$/.test(part))),
+  url: z
+    .string()
+    .regex(REPOSITORY_URL)
+    .refine((url) => normaliseRemote(url) === url)
+    .optional()
+    .catch(undefined),
+});
+export type SharedRepo = z.input<typeof sharedRepoSchema>;
 
 /**
  * The review's counts, and the shared findings in `findingList`. A finding
@@ -219,6 +260,20 @@ export const reviewUploadSchema = z.object({
       repository: z.string().regex(REPOSITORY_URL),
       number: z.number().int().positive().lt(1e9),
       headSha: z.string().regex(/^[0-9a-f]{40}(?:[0-9a-f]{24})?$/),
+    })
+    .optional()
+    .catch(undefined),
+  // Which repository it is, when the configuration shares its name.
+  repo: sharedRepoSchema.optional().catch(undefined),
+  // How the review came to its findings (ADR-0081): only with the findings.
+  trace: sharedTraceSchema.optional().catch(undefined),
+  // The text of each rule the shared findings name, by id (ADR-0080),
+  // redacted and cut like a finding's fields: only with the findings.
+  provenance: z
+    .object({
+      rules: z
+        .record(z.string().regex(FINDING_RULE_ID), z.string().max(MAX_RULE_TEXT))
+        .refine((rules) => Object.keys(rules).length <= MAX_FINDINGS),
     })
     .optional()
     .catch(undefined),

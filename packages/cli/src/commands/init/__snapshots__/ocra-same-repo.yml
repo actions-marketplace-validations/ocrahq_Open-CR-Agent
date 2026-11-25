@@ -4,6 +4,7 @@ name: ocra
 on: pull_request
 
 permissions:
+  checks: write
   contents: read
   issues: read
   pull-requests: write
@@ -21,7 +22,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
-      - uses: ocrahq/Open-CR-Agent@3999f294d7ce02a4fc83a301cfeb37dfbbfa0b3b # v0.21.0
+      - uses: ocrahq/Open-CR-Agent@c13507b6357ca73661d83f09a275d8aa49c4f688 # v0.26.0
         with:
           args: --max-cost-usd 2
         env:

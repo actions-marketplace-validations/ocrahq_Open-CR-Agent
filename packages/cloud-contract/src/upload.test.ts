@@ -1,6 +1,12 @@
 import { describe, expect, it } from "vitest";
 import upload from "../fixtures/upload.json" with { type: "json" };
-import { MAX_EVIDENCE, MAX_EVIDENCE_FIELD, MAX_FIELD } from "./limits.js";
+import {
+  MAX_EVIDENCE,
+  MAX_EVIDENCE_FIELD,
+  MAX_FIELD,
+  MAX_FINDINGS,
+  MAX_RULE_TEXT,
+} from "./limits.js";
 import { reviewUploadSchema, sharedFindingSchema, uploadAnswerSchema } from "./upload.js";
 
 const { about: _, ...body } = upload;
@@ -227,6 +233,97 @@ describe("a shared finding's evidence", () => {
       const parsed = sharedFindingSchema.parse({ ...finding, evidence: bad });
       expect(parsed.evidence, JSON.stringify(bad).slice(0, 60)).toBeUndefined();
       expect(parsed.title).toBe(finding?.title);
+    }
+  });
+});
+
+describe("a shared finding's rule", () => {
+  const [finding] = body.findingList;
+
+  it("is kept as sent, and absent from an older upload", () => {
+    const rule = { kind: "learning", id: "retry-without-backoff" };
+    expect(sharedFindingSchema.parse({ ...finding, rule }).rule).toEqual(rule);
+    const { rule: _r, ...older } = finding ?? {};
+    expect(sharedFindingSchema.parse(older)).not.toHaveProperty("rule");
+  });
+
+  it("reads as absent with an unknown kind or an id that is not one", () => {
+    for (const bad of [
+      { kind: "guideline", id: "tenant" },
+      { kind: "rule", id: "Tenant Ids" },
+      { kind: "rule", id: "x".repeat(81) },
+      "tenant",
+    ]) {
+      const parsed = sharedFindingSchema.parse({ ...finding, rule: bad });
+      expect(parsed.rule, JSON.stringify(bad)).toBeUndefined();
+      expect(parsed.title).toBe(finding?.title);
+    }
+  });
+});
+
+describe("the rules' text in an upload", () => {
+  it("is kept by id, and absent from an older upload", () => {
+    const provenance = { rules: { "tenant-scope": "Scope queries by tenant." } };
+    expect(reviewUploadSchema.parse({ ...body, provenance }).provenance).toEqual(provenance);
+    const { provenance: _p, ...older } = body;
+    expect(reviewUploadSchema.parse(older)).not.toHaveProperty("provenance");
+  });
+
+  it("reads as absent with an id that is not one, a text too long or too many rules", () => {
+    const many = Object.fromEntries(
+      Array.from({ length: MAX_FINDINGS + 1 }, (_, i) => [`rule-${i}`, "r"]),
+    );
+    for (const rules of [
+      { "Tenant Scope": "r" },
+      { "tenant-scope": "x".repeat(MAX_RULE_TEXT + 1) },
+      { "tenant-scope": 1 },
+      many,
+    ]) {
+      const parsed = reviewUploadSchema.parse({ ...body, provenance: { rules } });
+      expect(parsed.provenance, JSON.stringify(rules).slice(0, 60)).toBeUndefined();
+      expect(parsed.runId).toBe(body.runId);
+    }
+  });
+});
+
+describe("a repository's name in an upload", () => {
+  const repo = { name: "octo/app", url: "https://github.com/octo/app" };
+
+  it("is kept as sent, with or without its address, and absent from an older upload", () => {
+    expect(reviewUploadSchema.parse({ ...body, repo }).repo).toEqual(repo);
+    const nested = { name: "group/sub/app" };
+    expect(reviewUploadSchema.parse({ ...body, repo: nested }).repo).toEqual(nested);
+    const { repo: _r, ...older } = { ...body, repo };
+    expect(reviewUploadSchema.parse(older)).not.toHaveProperty("repo");
+  });
+
+  it("reads as absent with a name that is not a path on a host", () => {
+    for (const name of [
+      "app",
+      "octo/",
+      "/octo/app",
+      "octo/../app",
+      "octo/a pp",
+      `o/${"a".repeat(200)}`,
+    ]) {
+      const parsed = reviewUploadSchema.parse({ ...body, repo: { ...repo, name } });
+      expect(parsed.repo, name).toBeUndefined();
+      expect(parsed.runId).toBe(body.runId);
+    }
+  });
+
+  it("keeps the name without an address that is not the normalised https one", () => {
+    for (const url of [
+      "http://github.com/octo/app",
+      "https://user:pass@github.com/octo/app",
+      "https://github.com:8443/octo/app",
+      "https://GitHub.com/Octo/App",
+      "https://github.com/octo/app.git",
+      "git@github.com:octo/app",
+    ]) {
+      expect(reviewUploadSchema.parse({ ...body, repo: { ...repo, url } }).repo, url).toEqual({
+        name: "octo/app",
+      });
     }
   });
 });

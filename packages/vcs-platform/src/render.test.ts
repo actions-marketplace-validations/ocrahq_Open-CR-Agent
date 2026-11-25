@@ -21,7 +21,7 @@ describe("renderSummary", () => {
       text: gitlab,
     });
     expect(body).toContain(
-      `Someone with the Developer role or higher other than the author can let this commit pass by commenting \`/ocra override ${HEAD} <reason>\`.`,
+      `Someone with the Developer role or higher other than the author can let this commit pass by commenting \`@ocra override ${HEAD} <reason>\`.`,
     );
     expect(body).toContain("the next review of this merge request includes them");
   });
@@ -33,6 +33,7 @@ describe("renderSummary", () => {
         coverage: [
           { path: "src/long.ts", status: "incomplete", ended: "step_cap" },
           { path: "src/odd.ts", status: "incomplete", ended: "stopped_early" },
+          { path: "src/big.ts", status: "incomplete", ended: "context_window" },
           { path: "src/ok.ts", status: "reviewed" },
         ],
       },
@@ -47,10 +48,14 @@ describe("renderSummary", () => {
     expect(body).toContain(
       "**Incomplete:** 1 selected file(s) were only partly reviewed: a reviewer stopped with steps left, without saying it had finished them.",
     );
+    expect(body).toContain(
+      "**Incomplete:** 1 selected file(s) were only partly reviewed: a reviewer filled its model's context window before it finished them. A smaller merge request, or a model with a larger window, leaves each file more room.",
+    );
+    expect(body).toContain("- partly reviewed (context window full): `src/big.ts`");
     expect(body).toContain("- partly reviewed (out of steps): `src/long.ts`");
     expect(body).toContain("- partly reviewed (stopped early): `src/odd.ts`");
     expect(body).toContain(
-      "1 reviewed · 2 partly reviewed · 0 unchanged since the last review · 0 not reviewed",
+      "1 reviewed · 3 partly reviewed · 0 unchanged since the last review · 0 not reviewed",
     );
   });
 
@@ -249,6 +254,32 @@ describe("findings outside the diff", () => {
     expect(body).toContain(
       "- 🟠 **Stale cache** · `src/login.ts:3` · not verified · pre-existing\\\n  Keeps old rows.",
     );
+  });
+});
+
+describe("the coding agent that ran the review", () => {
+  it("is named after ocra in the summary's heading and under each inline comment", () => {
+    const byAgent: ReviewReport = { ...report([]), agent: "Codex" };
+    const summary = renderSummary({
+      report: byAgent,
+      commented: new Set(),
+      state: { findings: [] },
+      text: gitlab,
+    });
+    expect(summary.split("\n")[1]).toMatch(/^## ocra · Codex review · /);
+    const body = inlineBody(finding("c".repeat(16)), githubSuggestion, "Codex");
+    expect(body.endsWith("\n\n<sub>ocra · Codex</sub>")).toBe(true);
+  });
+
+  it("is not named when ocra's own engine ran the review", () => {
+    const summary = renderSummary({
+      report: report([]),
+      commented: new Set(),
+      state: { findings: [] },
+      text: gitlab,
+    });
+    expect(summary.split("\n")[1]).toMatch(/^## ocra review · /);
+    expect(inlineBody(finding("c".repeat(16)), githubSuggestion)).not.toContain("<sub>");
   });
 });
 

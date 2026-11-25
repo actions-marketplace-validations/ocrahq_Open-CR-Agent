@@ -34,6 +34,8 @@ ocra Cloud 是建立在同一个引擎之上的网页控制台和模型网关。
 已登录的 CLI 上传的每次审查；账户共享发现时，还有它的发现、改动导读和它拿到的[关联任务](./how-it-works#关联的任务)。服务器自己运行的审查，不论你是否共享发现，都会连同发现一起列出（见[自动审查](#自动审查与-ocra)）。同一个 PR 后来的审查看到已修复的发现，会被标记为已修复（CLI 0.14.0 及以后）。
 
 - **问 ocra。** 审查页面可以回答关于这次审查和它的 PR 的问题（“这条发现为什么是严重的？”），使用你自己的模型 key。改动对模型来说只是数据，不是指令。
+- **追踪。** CLI 0.25.0 及以后连同发现一起上传的审查带着它的追踪（CLI 的 `trace.json`，见[会话记录](./cli#会话记录)）：审查页面把这次运行画成阶段、任务、尝试和模型调用的时间线，说明每条报告过的发现去了哪里、为什么，并可以把追踪下载为 JSON，作为证据交给 reviewer。标题、原因和路径与发现经过同样的脱敏；不发送代码、提示词、模型回答或搜索的文字。
+- **规则。** CLI 0.26.0 及以后连同发现一起上传的审查带着这些发现引用的每条[规则](./rules)的原文，与发现经过同样的脱敏，最多 2,000 个字符；学习只发送 id。账户规则可以像 `rules.json` 的规则一样写 `id`，发现用它引用规则。
 - **实时。** CLI 0.11.0 及以后运行的审查会在运行中转发进度；实时页面显示这次运行，你可以让指定的人、或这台服务器上任何已登录的人观看并评论发现。你同意之前什么都不会共享。
 
 ## Learnings
@@ -93,7 +95,7 @@ PR 页面会显示结果。bot 还会把它发布出来：GitHub 上是名为 `o
 - **登录。** GitHub App，或 OpenID Connect：公司的 SSO（Keycloak、Azure AD、Okta）或自托管的 GitLab。用 GitLab 作为登录提供方时，同一次登录也会连接 GitLab。
 - **谁可以登录。** 默认是登录提供方认可的任何人；设置 `SIGN_IN_ALLOW` 后只有名单里的人：`org:`（GitHub 组织的成员）、`user:`（GitHub 登录名）、`domain:`（该域名下已验证的邮箱）和 `group:`（SSO 给出的组），例如 `org:acme,domain:acme.com`。不匹配任何一项的登录会在创建账户之前被拒绝。会话和 API token 每小时内会重新检查一次，名单变化时立即检查，所以离开组织后访问随之结束。
 - **代码平台。** GitLab.com 或自托管的 GitLab（`GITLAB_URL`，也支持装在相对路径下的实例，比如 `https://example.com/gitlab`）；github.com 或一台 GitHub Enterprise Server（`GITHUB_URL`），之后 API、登录、bot 和链接都指向那台服务器。一台服务器只对应一个 GitHub。
-- **公司模型。** `MODEL_ENDPOINTS` 声明公司的 OpenAI 兼容端点，`BUILTIN_PROVIDERS=off` 隐藏公共供应商，`DEFAULT_MODELS` 给每个新账户设好模型；一个模型就够了，没写的层级会取最接近的已写层级。
+- **公司模型。** `MODEL_ENDPOINTS` 声明公司的端点，可以是 OpenAI 的 chat completions 协议或 Anthropic 的 Messages 协议，并可写上每个模型的价格，用于报告的花费；`BUILTIN_PROVIDERS=off` 隐藏公共供应商，`DEFAULT_MODELS` 给每个新账户设好模型；一个模型就够了，没写的层级会取最接近的已写层级。服务器的环境里写了公司的证书颁发机构（`NODE_EXTRA_CA_CERTS`）和代理（`HTTPS_PROXY`、`NO_PROXY`）时，服务器和它运行的评审都会使用。拒绝函数调用的模型服务也能评审（[不支持函数调用的端点](./providers#不支持函数调用的端点)）。
 - **审查。** 服务器在自己的进程里运行审查，或者交给其他机器上的远程 runner（`RUNNER_TOKEN`）。
 - **邮件。** 设置 `SMTP_URL` 和 `SMTP_FROM` 后可以发邮件通知。
 

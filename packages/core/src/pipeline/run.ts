@@ -1,6 +1,8 @@
 import { spendLimit } from "../agent/spend-limit.js";
 import { OcraError } from "../errors.js";
-import type { ReviewReport } from "../report/report.js";
+import type { ReviewEvent, ReviewReport } from "../report/report.js";
+import { TraceRecorder } from "../report/trace.js";
+import { tracedRuntime } from "../report/traced-runtime.js";
 import { correctnessReviewer } from "../review/reviewers/correctness.js";
 import { assembleReport } from "./assemble-report.js";
 import { checkStage } from "./check-stage.js";
@@ -23,16 +25,26 @@ export function review(options: ReviewOptions): Promise<ReviewReport> {
   return reviewWithHooks(options);
 }
 
-export async function reviewWithHooks(options: ReviewOptions & ReviewHooks): Promise<ReviewReport> {
+export async function reviewWithHooks(given: ReviewOptions & ReviewHooks): Promise<ReviewReport> {
+  const reviewers = given.reviewers ?? [correctnessReviewer];
+  if (reviewers.length === 0) throw new OcraError("CONFIG_INVALID", "No reviewer is registered");
+  const trace = new TraceRecorder();
+  const onEvent = given.onEvent ?? (() => {});
+  const emit = (event: ReviewEvent) => {
+    trace.record(event);
+    onEvent(event);
+  };
+  const options = { ...given, runtime: tracedRuntime(given.runtime, emit) };
   const settings = runSettings(options);
-  const emit = options.onEvent ?? (() => {});
   const timeout = AbortSignal.timeout(settings.runTimeoutMs);
   const signal = options.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
-  const reviewers = options.reviewers ?? [correctnessReviewer];
-  if (reviewers.length === 0) throw new OcraError("CONFIG_INVALID", "No reviewer is registered");
   const runId = options.identity?.runId ?? newRunId();
 
-  const plan = await planReview({ ...options, runId, full: settings.full }, emit, signal);
+  const plan = await planReview(
+    { ...options, bundling: options.bundling ?? settings.bundling, runId, full: settings.full },
+    emit,
+    signal,
+  );
   for (const usage of plan.usage) emit({ type: "usage_reported", usage });
   const context: StageContext = {
     options,
@@ -50,7 +62,7 @@ export async function reviewWithHooks(options: ReviewOptions & ReviewHooks): Pro
   const filtered = await filterStage(executed, plan.prior.review, context);
   const checked = await checkStage(filtered, executed.early, context);
   const fixed = await fixStage(checked, context);
-  const report = assembleReport(
+  const assembled = assembleReport(
     { runId, reviewers },
     {
       executed,
@@ -62,6 +74,7 @@ export async function reviewWithHooks(options: ReviewOptions & ReviewHooks): Pro
     },
     context,
   );
+  const report = { ...assembled, trace: trace.build(assembled) };
   emit({ type: "run_finished", report });
   return report;
 }

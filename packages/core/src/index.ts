@@ -58,6 +58,7 @@ export type {
   Finding,
   FindingFix,
   FindingProvenance,
+  FindingRule,
   FindingStatus,
   Hunk,
   LineRange,
@@ -125,6 +126,7 @@ export type {
   OcraPlugin,
   PluginSummary,
   PostConfigureContext,
+  ProviderModel,
   RuntimeFactory,
   RuntimeOptions,
   VcsFactory,
@@ -157,6 +159,16 @@ export {
   type TaskOutcome,
   type TaskStatus,
 } from "./report/report.js";
+export {
+  FINDING_FATES,
+  type FindingFate,
+  type ReviewTrace,
+  type TraceAttempt,
+  type TraceCall,
+  type TraceFinding,
+  type TraceStage,
+  type TraceTask,
+} from "./report/trace.js";
 export {
   isOptionalContext,
   OPTIONAL_CONTEXT,

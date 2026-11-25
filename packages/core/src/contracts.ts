@@ -123,9 +123,10 @@ export interface ReviewContext {
 }
 
 // How a review task that finished without the done tool ended: its agent
-// used every step (step_cap), or stopped with steps left (stopped_early; one
-// that stopped silently was first told once to continue).
-export const INCOMPLETE_ENDINGS = ["step_cap", "stopped_early"] as const;
+// used every step (step_cap), filled its model's declared context window
+// (context_window), or stopped with steps left (stopped_early; one that
+// stopped silently was first told once to continue).
+export const INCOMPLETE_ENDINGS = ["step_cap", "context_window", "stopped_early"] as const;
 export type IncompleteEnding = (typeof INCOMPLETE_ENDINGS)[number];
 
 // Why every model a task could use refused it: a per-day limit, which a new
@@ -137,12 +138,20 @@ export type QuotaStop = (typeof QUOTA_STOPS)[number];
 // What one attempt of a review task looked at and answered: the files it
 // read, the literals it searched for and its final text. Kept in the session
 // log, never in the report, so an analysis can tell a file the reviewer never
-// read from one it read and reported nothing on.
+// read from one it read and reported nothing on. The rest is what the run's
+// trace shows of it (ADR-0081); absent from logs older than that.
 export interface AttemptRecord {
   model: string;
   read: string[];
   searched: string[];
   text: string;
+  // Model requests, one per agent step, the wrap-up turn's included.
+  steps?: number;
+  // Calls per tool, as the review tools name them.
+  tools?: Record<string, number>;
+  ending?: "done" | IncompleteEnding | "error";
+  usage?: Usage;
+  ms?: number;
 }
 
 export type AgentEvent =
@@ -196,6 +205,8 @@ export interface CompletionRequest {
 export interface CompletionResult {
   text: string;
   usage: Usage;
+  // The model that answered, when the runtime says.
+  model?: string;
 }
 
 // Sampling settings for model calls. Unset fields leave the provider's
@@ -230,6 +241,9 @@ export interface AppliedSettings {
 
 export interface AgentRuntime {
   readonly name: string;
+  // The coding agent that runs each review task, as people know it
+  // ("Codex"); absent when ocra's own engine runs them.
+  readonly agent?: string;
   // Absent: the runtime applies none of the requested sampling settings.
   readonly sampling?: AppliedSampling;
   // What the runtime applied for an agent that asked for an effort; undefined
